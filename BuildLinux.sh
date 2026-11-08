@@ -151,7 +151,7 @@ fi
 if [[ -n "${BUILD_DEPS}" ]]
 then
     echo "Configuring dependencies..."
-    BUILD_ARGS="-DDEP_WX_GTK3=ON"
+    BUILD_ARGS="-DDEP_WX_GTK3=ON -DCMAKE_POLICY_VERSION_MINIMUM=3.5"
     if [[ -n "${CLEAN_BUILD}" ]]
     then
         rm -fr deps/build
@@ -181,7 +181,7 @@ then
     then
         rm -fr build
     fi
-    BUILD_ARGS=""
+    BUILD_ARGS="-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
     if [[ -n "${FOUND_GTK3_DEV}" ]]
     then
         BUILD_ARGS="-DSLIC3R_GTK=3"
