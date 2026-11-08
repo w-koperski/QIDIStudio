@@ -5,10 +5,14 @@ RUN apt-get update && \
     echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections
 
 # Add a deb-src
-RUN echo deb-src http://archive.ubuntu.com/ubuntu \
-    $(cat /etc/*release | grep VERSION_CODENAME | cut -d= -f2) main universe>> /etc/apt/sources.list 
+RUN if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then \
+        sed -i 's/^Types: deb$/Types: deb deb-src/' /etc/apt/sources.list.d/ubuntu.sources; \
+    else \
+        echo deb-src http://archive.ubuntu.com/ubuntu \
+        $(cat /etc/*release | grep VERSION_CODENAME | cut -d= -f2) main universe >> /etc/apt/sources.list; \
+    fi
 
-RUN apt-get update && apt-get install  -y \
+RUN apt-get update && apt-get install -y \
     autoconf \
     build-essential \
     cmake \
@@ -23,14 +27,12 @@ RUN apt-get update && apt-get install  -y \
     libcairo2-dev \
     libcurl4-openssl-dev \
     libdbus-1-dev \
-    libglew-dev \ 
-    libglu1-mesa-dev \
+    libglew-dev \
     libglu1-mesa-dev \
     libgstreamer1.0-dev \
-    libgstreamerd-3-dev \ 
+    libgstreamerd-3-dev \
     libgstreamer-plugins-base1.0-dev \
     libgstreamer-plugins-good1.0-dev \
-    libgtk-3-dev \
     libgtk-3-dev \
     libosmesa6-dev \
     libsecret-1-dev \
@@ -108,14 +110,14 @@ USER $USER
 
 # These can run together, but we run them separate for podman caching
 # Build dependencies in ./deps
-RUN ./BuildLinux.sh -d
+RUN ./BuildLinux.sh -dfr
 
 # Build slic3r
-RUN ./BuildLinux.sh -s
+RUN ./BuildLinux.sh -sfr
 
 # Build AppImage
 ENV container=podman
-RUN ./BuildLinux.sh -i
+RUN ./BuildLinux.sh -ifr
 
 
 # Use bash as the shell

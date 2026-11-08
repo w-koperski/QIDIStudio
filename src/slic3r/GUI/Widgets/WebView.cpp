@@ -24,11 +24,14 @@
 #include <WebView2.h>
 #elif defined __linux__
 #include <gtk/gtk.h>
+#include <dlfcn.h>
 #define WEBKIT_API
 struct WebKitWebView;
 struct WebKitWebContext;
 struct WebKitCookieManager;
 struct SoupCookie;
+struct WebKitUserContentManager;
+struct WebKitUserScript;
 #if defined(QDT_WEBKITGTK_4_1)
 struct _JSCValue;
 typedef struct _JSCValue JSCValue;
@@ -103,6 +106,69 @@ register_webview_handler(gpointer data)
     // And the memory: file system
     webView->RegisterHandler(wxSharedPtr<wxWebViewHandler>(new wxWebViewFSHandler("memory")));
     return NULL;
+}
+
+typedef WebKitUserContentManager* (*qdt_wv_get_ucm_t)(WebKitWebView*);
+typedef WebKitUserScript*         (*qdt_us_new_t)(const char*, int, int, const char* const*, const char* const*);
+typedef void                      (*qdt_ucm_add_script_t)(WebKitUserContentManager*, WebKitUserScript*);
+typedef void                      (*qdt_us_unref_t)(WebKitUserScript*);
+
+static void inject_vue_resize_fix(WebKitWebView *wkWebView)
+{
+    if (!wkWebView)
+        return;
+
+    static qdt_wv_get_ucm_t     sym_get_ucm    = nullptr;
+    static qdt_us_new_t         sym_script_new = nullptr;
+    static qdt_ucm_add_script_t sym_add_script = nullptr;
+    static qdt_us_unref_t       sym_us_unref   = nullptr;
+    static bool symbols_resolved = false;
+
+    if (!symbols_resolved) {
+        sym_get_ucm    = (qdt_wv_get_ucm_t)     dlsym(RTLD_DEFAULT, "webkit_web_view_get_user_content_manager");
+        sym_script_new = (qdt_us_new_t)         dlsym(RTLD_DEFAULT, "webkit_user_script_new");
+        sym_add_script = (qdt_ucm_add_script_t) dlsym(RTLD_DEFAULT, "webkit_user_content_manager_add_script");
+        sym_us_unref   = (qdt_us_unref_t)       dlsym(RTLD_DEFAULT, "webkit_user_script_unref");
+        symbols_resolved = true;
+    }
+
+    if (!sym_get_ucm || !sym_script_new || !sym_add_script || !sym_us_unref)
+        return;
+
+    WebKitUserContentManager *ucm = sym_get_ucm(wkWebView);
+    if (!ucm)
+        return;
+
+    if (g_object_get_data(G_OBJECT(ucm), "qdt_vue_resize_fix_injected"))
+        return;
+
+    static const char *PATCH_SCRIPT =
+        "(function() {"
+        "  var _orig = document.createElement.bind(document);"
+        "  document.createElement = function(tag) {"
+        "    if (typeof tag === 'string' && tag.toLowerCase() === 'object') {"
+        "      var el = _orig('div');"
+        "      Object.defineProperty(el, 'contentDocument', { get: function() { return null; } });"
+        "      Object.defineProperty(el, 'contentWindow',  { get: function() { return null; } });"
+        "      var _ael = el.addEventListener.bind(el);"
+        "      el.addEventListener = function(type, fn, opts) {"
+        "        if (type === 'load') return;"
+        "        return _ael(type, fn, opts);"
+        "      };"
+        "      return el;"
+        "    }"
+        "    return _orig(tag);"
+        "  };"
+        "})();";
+
+    // 0 = WEBKIT_USER_CONTENT_INJECT_ALL_FRAMES, 0 = WEBKIT_USER_SCRIPT_INJECT_AT_DOCUMENT_START
+    WebKitUserScript *script = sym_script_new(PATCH_SCRIPT, 0, 0, nullptr, nullptr);
+    if (!script)
+        return;
+
+    sym_add_script(ucm, script);
+    sym_us_unref(script);
+    g_object_set_data(G_OBJECT(ucm), "qdt_vue_resize_fix_injected", GINT_TO_POINTER(1));
 }
 #endif
 
@@ -365,6 +431,10 @@ wxWebView* WebView::CreateWebView(wxWindow * parent, wxString const & url)
         webView->Create(parent, wxID_ANY, url2, wxDefaultPosition, wxDefaultSize, wxBORDER_NONE);
         webView->SetUserAgent(wxString::Format("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) QDT-Slicer/v%s (%s) QDT-Language/%s",
             SLIC3R_VERSION, Slic3r::GUI::wxGetApp().dark_mode() ? "dark" : "light", language_code.mb_str()));
+#if defined(__linux__)
+        WebKitWebView *wkWebView = (WebKitWebView *) webView->GetNativeBackend();
+        inject_vue_resize_fix(wkWebView);
+#endif
 #endif
 #ifdef __WXMAC__
         WKWebView * wkWebView = (WKWebView *) webView->GetNativeBackend();
@@ -414,6 +484,11 @@ wxWebView* WebView::CreateWebView(wxWindow * parent, wxString const & url)
 
 void WebView::LoadUrl(wxWebView * webView, wxString const &url)
 {
+    if (webView == nullptr) return;
+#if defined(__linux__)
+    WebKitWebView *wkWebView = (WebKitWebView *) webView->GetNativeBackend();
+    inject_vue_resize_fix(wkWebView);
+#endif
     auto url2  = url;
 #ifdef __WIN32__
     url2.Replace("\\", "/");
@@ -513,6 +588,10 @@ void WebView::RecreateAll()
     wxString language_code = Slic3r::GUI::wxGetApp().current_language_code().BeforeFirst('_');
     language_code          = language_code.ToStdString();
     for (auto webView : g_webviews) {
+#if defined(__linux__)
+        WebKitWebView *wkWebView = (WebKitWebView *) webView->GetNativeBackend();
+        inject_vue_resize_fix(wkWebView);
+#endif
         webView->SetUserAgent(wxString::Format("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) QDT-Slicer/v%s (%s) QDT-Language/%s",
                                                SLIC3R_VERSION, dark ? "dark" : "light", language_code.mb_str()));
         webView->Reload();

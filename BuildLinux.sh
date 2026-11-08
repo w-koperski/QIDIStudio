@@ -12,13 +12,12 @@ function check_available_memory_and_disk() {
     MIN_DISK_KB=$((10 * 1024 * 1024))
 
     if [ ${FREE_MEM_GB} -le ${MIN_MEM_GB} ]; then
-        echo -e "\nERROR: QIDI Studio Builder requires at least ${MIN_MEM_GB}G of 'available' mem (systen has only ${FREE_MEM_GB}G available)"
+        echo -e "\nWARNING: QIDI Studio Builder recommends at least ${MIN_MEM_GB}G of 'available' mem (system has only ${FREE_MEM_GB}G available)"
         echo && free -h && echo
-        exit 2
     fi
 
     if [[ ${FREE_DISK_KB} -le ${MIN_DISK_KB} ]]; then 
-        echo -e "\nERROR: QIDI Studio Builder requires at least $(echo $MIN_DISK_KB |awk '{ printf "%.1fG\n", $1/1024/1024; }') (systen has only $(echo ${FREE_DISK_KB} | awk '{ printf "%.1fG\n", $1/1024/1024; }') disk free)"
+        echo -e "\nERROR: QIDI Studio Builder requires at least $(echo $MIN_DISK_KB |awk '{ printf "%.1fG\n", $1/1024/1024; }') (system has only $(echo ${FREE_DISK_KB} | awk '{ printf "%.1fG\n", $1/1024/1024; }') disk free)"
         echo && df -h . && echo
         exit 1
     fi
@@ -93,15 +92,15 @@ then
     exit 0
 fi
 
-DISTRIBUTION=$(awk -F= '/^ID=/ {print $2}' /etc/os-release)
-VERSION=$(awk -F= '/^VERSION_ID=/ {print $2}' /etc/os-release)
+DISTRIBUTION=$(awk -F= '/^ID=/ {print $2}' /etc/os-release | tr -d '"')
+VERSION=$(awk -F= '/^VERSION_ID=/ {print $2}' /etc/os-release | tr -d '"')
 # OSLIKE is a space-delineated list of similar distributions
 OSLIKE=$(awk -F= '/^ID_LIKE=/ {print $2}' /etc/os-release | tr -d '"')
 
 # Iterate over a list of candidate distribution targets, first match is used
 for CANDIDATE in ${DISTRIBUTION} ${OSLIKE}; do
     if [ -f ./linux.d/${CANDIDATE} ]
-    then 
+    then
         TARGET_DISTRO="${CANDIDATE}"
         break
     fi
