@@ -33,6 +33,5 @@ test.js
 /.cache/
 .clangd
 /src/slic3r/QIDI/
-/deps/pgLibConnect
 .workbuddy
 .zed/
