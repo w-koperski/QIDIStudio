@@ -1,6 +1,7 @@
 #!/bin/bash
 
 export ROOT=$(dirname $(readlink -f ${0}))
+export CMAKE_POLICY_VERSION_MINIMUM=3.5
 
 set -e # exit on first error
 
